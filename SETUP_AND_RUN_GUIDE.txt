@@ -1,0 +1,322 @@
+ITRC Common Criteria Evaluation Platform - Setup and Run Guide
+================================================================
+
+OVERVIEW
+--------
+This platform consists of three main components:
+1. PostgreSQL Database
+2. Python FastAPI Backend
+3. Next.js Frontend
+
+PREREQUISITES
+-------------
+1. PostgreSQL 17 (already installed)
+2. Python 3.13+ (with virtual environment support)
+3. Node.js 18+ and npm
+4. Git
+
+INITIAL SETUP
+=============
+
+1. DATABASE SETUP
+-----------------
+The database has already been created. If you need to recreate it:
+
+a) Open Command Prompt or PowerShell as Administrator
+b) Ensure PostgreSQL bin directory is in PATH:
+   - Add "C:\Program Files\PostgreSQL\17\bin" to your system PATH
+c) Create database:
+   createdb -U postgres itrc_cc_db
+d) Verify database exists:
+   psql -U postgres -l
+
+2. BACKEND SETUP
+----------------
+a) Navigate to backend directory:
+   cd backend
+
+b) Create and activate virtual environment:
+   python -m venv venv
+   
+   # If PowerShell execution policy blocks activation:
+   Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+   
+   # Activate virtual environment:
+   venv\Scripts\activate
+
+c) Install Python dependencies:
+   pip install -r requirements.txt
+
+d) Create .env file in backend directory with the following content:
+   ---
+   DATABASE_URL=postgresql+psycopg://postgres:your_postgres_password@localhost/itrc_cc_db
+   SECRET_KEY=your-secret-key-here
+   ALGORITHM=HS256
+   ACCESS_TOKEN_EXPIRE_MINUTES=30
+   UPLOAD_DIRECTORY=uploads
+   MAX_FILE_SIZE=52428800
+   ALLOWED_EXTENSIONS=pdf,doc,docx,txt,png,jpg,jpeg
+   PERSIAN_LANGUAGE_SUPPORT=true
+   ---
+   
+   IMPORTANT: Replace 'your_postgres_password' with your actual PostgreSQL password
+
+e) Initialize database tables and create test accounts:
+   python init_db.py
+   
+   This will:
+   - Create all database tables (users, applications, documents, etc.)
+   - Insert test accounts for all user roles
+   - Set up the initial database structure
+   
+   Expected output should show:
+   - "Database tables created successfully"
+   - "Test users created successfully"
+   - User accounts for Admin, Governance, Evaluator, and Applicant roles
+   
+   Note: If init_db.py was deleted, you can recreate the database tables by running:
+   python -c "from app.database import engine; from app.models import Base; Base.metadata.create_all(bind=engine)"
+   
+   TROUBLESHOOTING DATABASE INITIALIZATION:
+   - If you get "ALLOWED_EXTENSIONS" error: Check .env file format (no spaces around commas)
+   - If you get database connection error: Verify PostgreSQL is running and password is correct
+   - If you get module import errors: Ensure virtual environment is activated
+
+3. FRONTEND SETUP
+-----------------
+a) Navigate to frontend directory:
+   cd frontend/E-learning-1.0.0
+
+b) Install Node.js dependencies:
+   npm install
+
+c) Create .env.local file in frontend directory:
+   ---
+   NEXT_PUBLIC_API_URL=http://localhost:8000
+   ---
+
+QUICK START CHECKLIST
+======================
+For experienced users who want to get running quickly:
+
+1. ✅ Ensure PostgreSQL is running (check Windows Services)
+2. ✅ Create backend/.env file with your database password
+3. ✅ Backend setup:
+   cd backend
+   python -m venv venv
+   venv\Scripts\activate
+   pip install -r requirements.txt
+   python init_db.py
+4. ✅ Start backend: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+5. ✅ Frontend setup (new terminal):
+   cd frontend/E-learning-1.0.0
+   npm install
+6. ✅ Start frontend: npm run dev
+7. ✅ Access: http://localhost:3000 (frontend) or http://localhost:8000/api/docs (API)
+
+RUNNING THE PROJECT
+===================
+
+You need to run all three components simultaneously in separate terminal windows:
+
+1. DATABASE
+-----------
+PostgreSQL should already be running as a Windows service.
+
+To verify PostgreSQL is running (choose one method):
+
+Method 1 - Windows Services:
+- Press Win + R, type "services.msc" and press Enter
+- Look for "postgresql-x64-17" service - it should show "Running"
+
+Method 2 - Task Manager:
+- Open Task Manager (Ctrl + Shift + Esc)
+- Go to Services tab
+- Look for "postgresql-x64-17" - Status should be "Running"
+
+Method 3 - Command Line (if PostgreSQL bin is in PATH):
+- Run: pg_isready -h localhost
+
+To add PostgreSQL to PATH (if needed):
+a) Press Win + X, select "System"
+b) Click "Advanced system settings"
+c) Click "Environment Variables"
+d) Under "System Variables", select "Path" and click "Edit"
+e) Click "New" and add: C:\Program Files\PostgreSQL\17\bin
+f) Click OK to save and restart your command prompt
+
+Alternative: Use full path to PostgreSQL commands:
+"C:\Program Files\PostgreSQL\17\bin\pg_isready" -h localhost
+
+2. BACKEND (Terminal 1)
+-----------------------
+a) Navigate to backend directory:
+   cd backend
+
+b) Activate virtual environment:
+   venv\Scripts\activate
+
+c) Start FastAPI server:
+   uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+   The backend will be available at: http://localhost:8000
+   API documentation at: http://localhost:8000/docs
+
+3. FRONTEND (Terminal 2)
+------------------------
+a) Navigate to frontend directory:
+   cd frontend/E-learning-1.0.0
+
+b) Start Next.js development server:
+   npm run dev
+
+   The frontend will be available at: http://localhost:3000
+
+ACCESS INFORMATION
+==================
+
+DEFAULT TEST ACCOUNTS
+----------------------
+1. Admin: admin@itrc.ac.ir / admin123
+2. Governance: governance@itrc.ac.ir / gov123
+3. Evaluator: evaluator@itrc.ac.ir / eval123
+4. Applicant: applicant@company.com / app123
+
+URLS
+----
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- API Documentation: http://localhost:8000/docs
+- Database: localhost:5432/itrc_cc_db (NOT accessible via web browser)
+
+HOW TO ACCESS DATA
+==================
+
+1. VIA WEB INTERFACE (Recommended)
+----------------------------------
+- Frontend Application: http://localhost:3000
+  Use this for the complete user experience with Persian interface
+
+- Backend API Documentation: http://localhost:8000/docs
+  Interactive API documentation where you can test endpoints
+
+2. VIA DATABASE CLIENTS
+-----------------------
+PostgreSQL database (port 5432) requires database client software:
+
+Option A - Command Line (psql):
+- If PostgreSQL bin in PATH: psql -U postgres -d itrc_cc_db
+- Full path: "C:\Program Files\PostgreSQL\17\bin\psql" -U postgres -d itrc_cc_db
+
+Option B - GUI Database Tools:
+- pgAdmin (comes with PostgreSQL installation)
+- DBeaver (free, cross-platform)
+- Azure Data Studio
+- DataGrip (JetBrains)
+
+Connection Details for Database Clients:
+- Host: localhost
+- Port: 5432
+- Database: itrc_cc_db
+- Username: postgres
+- Password: (your PostgreSQL password)
+
+3. VIA API ENDPOINTS
+--------------------
+You can also access data through REST API calls:
+- GET http://localhost:8000/users/ (requires authentication)
+- GET http://localhost:8000/applications/ (requires authentication)
+- POST http://localhost:8000/auth/login (to get access token)
+
+IMPORTANT NOTE
+--------------
+❌ DON'T try to access: http://localhost:5432/itrc_cc_db
+   Port 5432 is a database port, not a web port!
+
+✅ DO use these instead:
+   - http://localhost:3000 (Frontend UI)
+   - http://localhost:8000/docs (API Documentation)
+   - Database client software for direct database access
+
+FEATURES
+========
+- User authentication with JWT tokens
+- Role-based access control (Admin, Governance, Evaluator, Applicant)
+- Persian language support with RTL interface
+- File upload for documents (PDF, DOC, DOCX, TXT, PNG, JPG, JPEG)
+- 70 supported product types
+- 12 mandatory document types
+- ETR/TRP/VTR report generation workflow
+
+TROUBLESHOOTING
+===============
+
+1. BACKEND ISSUES
+-----------------
+- If "ALLOWED_EXTENSIONS" error occurs:
+  Check .env file format and ensure extensions are comma-separated without spaces
+
+- If database connection fails:
+  Verify PostgreSQL is running and DATABASE_URL is correct in .env file
+
+- If import errors occur:
+  Ensure virtual environment is activated and all dependencies are installed
+
+- If you get 404 errors on /docs:
+  Use the correct URL: http://localhost:8000/api/docs (not /docs)
+
+- If you get 422 Unprocessable Content errors:
+  This usually means the .env file is missing or database is not initialized
+  1. Ensure .env file exists in backend directory
+  2. Run: python init_db.py
+  3. Restart the backend server
+
+- If .env file is missing:
+  Create .env file manually in backend directory with the configuration shown above
+  The file must be named exactly ".env" (with no extension)
+
+- If bcrypt version warnings appear:
+  These are harmless warnings and don't affect functionality
+
+2. FRONTEND ISSUES
+------------------
+- If Next.js fails to start:
+  Delete .next folder and node_modules, then run `npm install` again
+
+- If API calls fail:
+  Verify backend is running on port 8000 and NEXT_PUBLIC_API_URL is correct
+
+3. DATABASE ISSUES
+------------------
+- If PostgreSQL won't start:
+  Check Windows Services for PostgreSQL service
+
+- If connection refused:
+  Verify PostgreSQL is listening on port 5432
+
+4. GENERAL ISSUES
+-----------------
+- Check all three components are running simultaneously
+- Verify all .env files are properly configured
+- Ensure all required ports (3000, 8000, 5432) are not blocked by firewall
+
+DEVELOPMENT WORKFLOW
+====================
+
+1. Start with backend setup and database initialization
+2. Test API endpoints using the documentation at /docs
+3. Start frontend and test authentication flow
+4. Create test applications and documents
+5. Test the complete evaluation workflow
+
+For production deployment, additional configuration for security, 
+performance, and scalability will be required.
+
+SUPPORT
+=======
+This platform is designed for the Iran ITRC (Iran Telecommunication 
+Research Center) Common Criteria Evaluation process. For technical 
+support or questions about the evaluation process, contact the 
+development team.
+
+Last Updated: January 2025 
