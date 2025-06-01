@@ -20,6 +20,8 @@ interface Application {
   status: string;
   submission_date: string | null;
   evaluation_level: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export default function EvaluatorDashboard() {
@@ -27,6 +29,115 @@ export default function EvaluatorDashboard() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [stats, setStats] = useState({
+    total: 0,
+    pending: 0,
+    inEvaluation: 0,
+    completed: 0
+  });
+
+  // Function to translate status to Persian
+  const getStatusDisplay = (status: string) => {
+    const statusMap: { [key: string]: { text: string; color: string } } = {
+      'draft': { text: 'پیش‌نویس', color: 'bg-gray-100 text-gray-800' },
+      'submitted': { text: 'ارسال شده', color: 'bg-yellow-100 text-yellow-800' },
+      'in_review': { text: 'در حال بررسی', color: 'bg-blue-100 text-blue-800' },
+      'in_evaluation': { text: 'در حال ارزیابی', color: 'bg-purple-100 text-purple-800' },
+      'completed': { text: 'تکمیل شده', color: 'bg-green-100 text-green-800' },
+      'rejected': { text: 'رد شده', color: 'bg-red-100 text-red-800' }
+    };
+    return statusMap[status] || { text: status, color: 'bg-gray-100 text-gray-800' };
+  };
+
+  // Function to format date
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('fa-IR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }).format(date);
+  };
+
+  const loadApplications = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setError("توکن احراز هویت یافت نشد");
+        window.location.href = "/signin";
+        return;
+      }
+  
+      console.log("🔍 Loading applications for evaluator dashboard...");
+      const response = await fetch("http://localhost:8000/api/applications/dashboard/list", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to load applications: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log("API Response Data (Evaluator):", data);
+  
+      const transformedData = data.map((app: any) => {
+        try {
+          return {
+            id: app.id,
+            application_number: app.application_number || `APP-${app.id}`,
+            product_name: app.product?.name || app.product_name || 'نامشخص',
+            product_type_name: app.product_type?.name_fa || 
+                              app.product_type?.name_en || 
+                              app.product_type_name || 
+                              '-',
+            status: app.status,
+            submission_date: app.submission_date || app.created_at,
+            evaluation_level: app.evaluation_level || 'تعیین نشده',
+            applicant_name: app.applicant?.full_name || app.applicant_name || 'نامشخص',
+            created_at: app.created_at,
+            updated_at: app.updated_at
+          };
+        } catch (error) {
+          console.error("Error transforming application (Evaluator):", app, error);
+          return null;
+        }
+      }).filter(Boolean) as Application[];
+  
+      // Filter applications for evaluator view AFTER transformation
+      const filteredData = transformedData.filter((app: Application) => 
+        app.status === 'submitted' || app.status === 'in_evaluation'
+      );
+      console.log("Filtered Transformed Data (Evaluator):", filteredData);
+      setApplications(filteredData);
+      
+      // Update stats for evaluator
+      const total = filteredData.length;
+      const pending = filteredData.filter((app: Application) => 
+        app.status === 'submitted' 
+      ).length;
+      const inEvaluation = filteredData.filter((app: Application) => 
+        app.status === 'in_evaluation'
+      ).length;
+      const completed = filteredData.filter((app: Application) =>
+        app.status === 'completed' 
+      ).length; 
+      
+      setStats({ total, pending, inEvaluation, completed });
+    } catch (error) {
+      console.error("❌ Failed to load applications (Evaluator):", error);
+      setError("خطا در بارگذاری درخواست‌ها");
+    } finally {
+      setLoading(false);
+    }
+  };
+  // Add a function to refresh applications
+  const refreshApplications = () => {
+    loadApplications();
+  };
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
@@ -34,61 +145,13 @@ export default function EvaluatorDashboard() {
       setUser(JSON.parse(userData));
     }
     
-    // Load applications available for evaluation from API
-    const loadApplications = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          setError("توکن احراز هویت یافت نشد");
-          window.location.href = "/signin";
-          return;
-        }
-
-        console.log("🔍 Loading evaluator applications from /api/applications/available");
-        const response = await fetch("http://localhost:8000/api/applications/available", {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        });
-
-        console.log("📊 Response status:", response.status);
-        
-        if (response.ok) {
-          const data: Application[] = await response.json();
-          setApplications(data);
-          console.log("✅ Evaluator applications loaded:", data.length, data);
-          setError("");
-        } else {
-          const errorText = await response.text();
-          console.error("❌ Failed to load applications:", response.status, errorText);
-          setError(`خطا در بارگیری درخواست‌ها: ${response.status} - ${errorText}`);
-          
-          // Try alternative endpoint for debugging
-          console.log("🔄 Trying alternative endpoint /api/applications/dashboard/list");
-          const dashboardResponse = await fetch("http://localhost:8000/api/applications/dashboard/list", {
-            headers: {
-              "Authorization": `Bearer ${token}`,
-            },
-          });
-          
-          if (dashboardResponse.ok) {
-            const dashboardData: Application[] = await dashboardResponse.json();
-            // Filter for SUBMITTED applications only (what evaluators should see)
-            const availableApps = dashboardData.filter(app => app.status === 'SUBMITTED');
-            setApplications(availableApps);
-            console.log("✅ Dashboard data loaded and filtered:", availableApps.length);
-            setError("");
-          }
-        }
-      } catch (error) {
-        console.error("Error loading applications:", error);
-        setError(`خطا در اتصال به سرور: ${error}`);
-      } finally {
-        setLoading(false);
-      }
-    };
-
+    // Load applications and stats from API
     loadApplications();
+    
+    // Set up polling to refresh applications every 30 seconds
+    const interval = setInterval(refreshApplications, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const handleLogout = () => {
@@ -101,6 +164,25 @@ export default function EvaluatorDashboard() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <h2 className="text-lg font-medium text-red-800 mb-2">خطا</h2>
+            <p className="text-red-700">{error}</p>
+            <button
+              onClick={loadApplications}
+              className="mt-4 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+            >
+              تلاش مجدد
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -138,7 +220,7 @@ export default function EvaluatorDashboard() {
             className="bg-white p-6 rounded-lg shadow"
           >
             <h3 className="text-lg font-medium text-gray-900">کل ارزیابی‌ها</h3>
-            <p className="text-3xl font-bold text-blue-600">{applications.length}</p>
+            <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -147,7 +229,7 @@ export default function EvaluatorDashboard() {
             className="bg-white p-6 rounded-lg shadow"
           >
             <h3 className="text-lg font-medium text-gray-900">در انتظار ارزیابی</h3>
-            <p className="text-3xl font-bold text-yellow-600">{applications.filter(app => app.status === 'SUBMITTED').length}</p>
+            <p className="text-3xl font-bold text-yellow-600">{stats.pending}</p>
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -155,8 +237,8 @@ export default function EvaluatorDashboard() {
             transition={{ delay: 0.2 }}
             className="bg-white p-6 rounded-lg shadow"
           >
-            <h3 className="text-lg font-medium text-gray-900">تکمیل شده</h3>
-            <p className="text-3xl font-bold text-green-600">{applications.filter(app => app.status === 'COMPLETED').length}</p>
+            <h3 className="text-lg font-medium text-gray-900">در حال ارزیابی</h3>
+            <p className="text-3xl font-bold text-purple-600">{stats.inEvaluation}</p>
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -164,8 +246,8 @@ export default function EvaluatorDashboard() {
             transition={{ delay: 0.3 }}
             className="bg-white p-6 rounded-lg shadow"
           >
-            <h3 className="text-lg font-medium text-gray-900">امتیاز عملکرد</h3>
-            <p className="text-3xl font-bold text-purple-600">95%</p>
+            <h3 className="text-lg font-medium text-gray-900">تکمیل شده</h3>
+            <p className="text-3xl font-bold text-green-600">{stats.completed}</p>
           </motion.div>
         </div>
 
@@ -234,16 +316,13 @@ export default function EvaluatorDashboard() {
                     نام محصول
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    متقاضی
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    سطح ارزیابی
+                    نوع محصول
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     وضعیت
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    تاریخ ارسال
+                    تاریخ ثبت
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     عملیات
@@ -251,44 +330,48 @@ export default function EvaluatorDashboard() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {applications.map((application) => (
-                  <tr key={application.id} className="hover:bg-gray-50">
+                {applications.map((app) => (
+                  <tr key={app.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {application.application_number}
+                      {app.application_number}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {application.product_name}
+                      {app.product_name}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {application.applicant_name}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {application.evaluation_level}
+                      {app.product_type_name}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                        {application.status}
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusDisplay(app.status).color}`}>
+                        {getStatusDisplay(app.status).text}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {application.submission_date}
+                      {formatDate(app.submission_date || app.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <Link
-                        href={`/dashboard/evaluator/evaluation/${application.id}`}
+                        href={`/dashboard/evaluator/evaluation/${app.id}`}
                         className="text-blue-600 hover:text-blue-900 ml-4"
                       >
                         شروع ارزیابی
                       </Link>
                       <Link
-                        href={`/dashboard/evaluator/documents/${application.id}`}
-                        className="text-green-600 hover:text-green-900"
+                        href={`/dashboard/evaluator/documents/${app.id}`}
+                        className="text-green-600 hover:text-green-900 mr-4"
                       >
                         مشاهده اسناد
                       </Link>
                     </td>
                   </tr>
                 ))}
+                {applications.length === 0 && !loading && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">
+                      هیچ درخواستی برای ارزیابی یافت نشد
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

@@ -213,4 +213,108 @@ class EvaluationGuideline(Base):
     category = Column(String)  # test_guidelines, cc_standards, etc.
     
     created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow) 
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class ProductClass(Base):
+    __tablename__ = "product_classes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    product_type_id = Column(Integer, ForeignKey("product_types.id"))
+    name_en = Column(String, nullable=False)
+    name_fa = Column(String, nullable=False)
+    code = Column(String, unique=True, nullable=False)  # e.g., "FAM_CRY", "FAM_MAL"
+    description_en = Column(Text)
+    description_fa = Column(Text)
+    order = Column(Integer, default=0)  # Display order
+    is_active = Column(Boolean, default=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    product_type = relationship("ProductType")
+    subclasses = relationship("ProductSubclass", back_populates="product_class")
+    evaluation_helps = relationship("EvaluationHelp", back_populates="product_class")
+
+class ProductSubclass(Base):
+    __tablename__ = "product_subclasses"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    product_class_id = Column(Integer, ForeignKey("product_classes.id"))
+    name_en = Column(String, nullable=False)
+    name_fa = Column(String, nullable=False)
+    code = Column(String, unique=True, nullable=False)  # e.g., "FAM_MAL.1", "FAM_MAL.2"
+    description_en = Column(Text)
+    description_fa = Column(Text)
+    order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    product_class = relationship("ProductClass", back_populates="subclasses")
+
+class EvaluationHelp(Base):
+    __tablename__ = "evaluation_helps"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    product_class_id = Column(Integer, ForeignKey("product_classes.id"))
+    product_subclass_id = Column(Integer, ForeignKey("product_subclasses.id"), nullable=True)
+    help_text_en = Column(Text, nullable=False)
+    help_text_fa = Column(Text, nullable=False)
+    evaluation_criteria = Column(JSON)  # Structured evaluation criteria
+    examples = Column(JSON)  # Example implementations
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    product_class = relationship("ProductClass", back_populates="evaluation_helps")
+    product_subclass = relationship("ProductSubclass")
+
+class SecurityTarget(Base):
+    __tablename__ = "security_targets"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    application_id = Column(Integer, ForeignKey("applications.id"), unique=True)
+    version = Column(String, default="1.0")
+    status = Column(String, default="draft")  # draft, submitted, approved
+    
+    # Product identification
+    product_description = Column(Text)
+    toe_description = Column(Text)  # Target of Evaluation description
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    submitted_at = Column(DateTime, nullable=True)
+    
+    # Relationships
+    application = relationship("Application", backref="security_target")
+    class_selections = relationship("STClassSelection", back_populates="security_target")
+
+class STClassSelection(Base):
+    __tablename__ = "st_class_selections"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    security_target_id = Column(Integer, ForeignKey("security_targets.id"))
+    product_class_id = Column(Integer, ForeignKey("product_classes.id"))
+    product_subclass_id = Column(Integer, ForeignKey("product_subclasses.id"), nullable=True)
+    
+    # User inputs
+    description = Column(Text, nullable=False)  # How this class is implemented
+    justification = Column(Text)  # Why this class is needed
+    test_approach = Column(Text)  # How it should be tested
+    
+    # Evaluation fields
+    evaluator_notes = Column(Text)
+    evaluation_status = Column(String, default="pending")  # pending, pass, fail, needs_revision
+    evaluation_score = Column(Float)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    security_target = relationship("SecurityTarget", back_populates="class_selections")
+    product_class = relationship("ProductClass")
+    product_subclass = relationship("ProductSubclass") 

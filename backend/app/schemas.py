@@ -214,10 +214,10 @@ class Report(ReportBase):
 
 # Dashboard schemas
 class DashboardStats(BaseModel):
-    total_applications: int
-    pending_applications: int
-    in_evaluation: int
-    completed_applications: int
+    total_applications: int = 0
+    pending_applications: int = 0
+    in_evaluation: int = 0
+    completed_applications: int = 0
     my_applications: Optional[int] = None
     my_evaluations: Optional[int] = None
 
@@ -272,4 +272,90 @@ class MessageResponse(BaseModel):
 class ErrorResponse(BaseModel):
     error: str
     detail: Optional[str] = None
-    success: bool = False 
+    success: bool = False
+
+class ProductSubclassSchema(BaseModel):
+    id: int
+    name_en: str
+    name_fa: str
+    code: str
+    description_en: Optional[str] = None
+    description_fa: Optional[str] = None
+    order: int = 0
+    
+    class Config:
+        from_attributes = True
+
+class ProductClassSchema(BaseModel):
+    id: int
+    product_type_id: int
+    name_en: str
+    name_fa: str
+    code: str
+    description_en: Optional[str] = None
+    description_fa: Optional[str] = None
+    order: int = 0
+    subclasses: List[ProductSubclassSchema] = []
+    
+    class Config:
+        from_attributes = True
+
+class STClassSelectionCreate(BaseModel):
+    product_class_id: int
+    product_subclass_id: Optional[int] = None
+    description: str
+    justification: Optional[str] = None
+    test_approach: Optional[str] = None
+
+class STClassSelectionSchema(BaseModel):
+    id: int
+    security_target_id: int
+    product_class_id: int
+    product_subclass_id: Optional[int] = None
+    description: str
+    justification: Optional[str] = None
+    test_approach: Optional[str] = None
+    evaluator_notes: Optional[str] = None
+    evaluation_status: str = "pending"
+    evaluation_score: Optional[float] = None
+    product_class: ProductClassSchema
+    product_subclass: Optional[ProductSubclassSchema] = None
+    
+    class Config:
+        from_attributes = True
+
+class SecurityTargetCreate(BaseModel):
+    product_description: Optional[str] = None
+    toe_description: Optional[str] = None
+
+class SecurityTargetUpdate(BaseModel):
+    product_description: Optional[str] = None
+    toe_description: Optional[str] = None
+    status: Optional[str] = None
+
+class SecurityTarget(BaseModel):
+    id: int
+    application_id: int
+    version: str = "1.0"
+    status: str = "draft"
+    product_description: Optional[str] = None
+    toe_description: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    submitted_at: Optional[datetime] = None
+    class_selections: List[STClassSelectionSchema] = []
+    
+    class Config:
+        from_attributes = True
+
+class EvaluationHelpSchema(BaseModel):
+    id: int
+    product_class_id: int
+    product_subclass_id: Optional[int] = None
+    help_text_en: str
+    help_text_fa: str
+    evaluation_criteria: Optional[dict] = None
+    examples: Optional[dict] = None
+    
+    class Config:
+        from_attributes = True 

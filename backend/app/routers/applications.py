@@ -378,19 +378,19 @@ async def get_dashboard_applications(
         # Applicants see their own applications
         applications = db.query(Application).filter(
             Application.applicant_id == current_user.id
-        ).all()
+        ).order_by(Application.created_at.desc()).all()
         print(f"📋 Applicant dashboard: Found {len(applications)} applications")
         
     elif current_user.role == UserRole.EVALUATOR:
         # Evaluators see submitted applications available for evaluation
         applications = db.query(Application).filter(
             Application.status.in_([ApplicationStatus.SUBMITTED, ApplicationStatus.IN_EVALUATION])
-        ).all()
+        ).order_by(Application.submission_date.desc()).all()
         print(f"📋 Evaluator dashboard: Found {len(applications)} applications")
         
     elif current_user.role in [UserRole.GOVERNANCE, UserRole.ADMIN]:
         # Governance and Admin see all applications
-        applications = db.query(Application).all()
+        applications = db.query(Application).order_by(Application.created_at.desc()).all()
         print(f"📋 Admin/Governance dashboard: Found {len(applications)} applications")
     
     # Convert to summary format
@@ -469,8 +469,12 @@ async def get_available_applications(
 
         # Add applicant name for evaluators
         applicant_name = "نامشخص"
-        if app.applicant:
-            applicant_name = app.applicant.company or app.applicant.full_name
+        if app.company_name:
+            applicant_name = app.company_name
+        elif app.applicant and app.applicant.company:
+            applicant_name = app.applicant.company
+        elif app.applicant:
+            applicant_name = app.applicant.full_name
         
         summaries.append(ApplicationSummary(
             id=app.id,

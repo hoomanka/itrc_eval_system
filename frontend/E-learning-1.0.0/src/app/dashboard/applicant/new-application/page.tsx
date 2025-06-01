@@ -90,7 +90,16 @@ export default function NewApplicationPage() {
     setLoading(true);
     setError("");
     
-    // Note: All fields are now optional - no validation required
+    // Check if antivirus product is selected
+    if (formData.product_type === "Antivirus Software") {
+      console.log("🔍 Antivirus product selected, saving form data:", formData);
+      // Save form data to localStorage
+      localStorage.setItem("applicationFormData", JSON.stringify(formData));
+      console.log("✅ Form data saved to localStorage");
+      // Redirect to security target form
+      window.location.href = "/dashboard/applicant/security-target";
+      return;
+    }
 
     try {
       const token = localStorage.getItem("token");

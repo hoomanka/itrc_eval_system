@@ -20,6 +20,8 @@ interface Application {
   submission_date: string | null;
   evaluation_level?: string;
   applicant_name?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export default function ApplicantDashboard() {
@@ -34,6 +36,106 @@ export default function ApplicantDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // Function to translate status to Persian
+  const getStatusDisplay = (status: string) => {
+    const statusMap: { [key: string]: { text: string; color: string } } = {
+      'draft': { text: 'پیش‌نویس', color: 'bg-gray-100 text-gray-800' },
+      'submitted': { text: 'ارسال شده', color: 'bg-yellow-100 text-yellow-800' },
+      'in_review': { text: 'در حال بررسی', color: 'bg-blue-100 text-blue-800' },
+      'in_evaluation': { text: 'در حال ارزیابی', color: 'bg-purple-100 text-purple-800' },
+      'completed': { text: 'تکمیل شده', color: 'bg-green-100 text-green-800' },
+      'rejected': { text: 'رد شده', color: 'bg-red-100 text-red-800' }
+    };
+    return statusMap[status] || { text: status, color: 'bg-gray-100 text-gray-800' };
+  };
+
+  // Function to format date
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('fa-IR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }).format(date);
+  };
+
+  const loadApplications = async () => {
+    setLoading(true);
+    setError(""); // Clear previous errors
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setError("توکن احراز هویت یافت نشد");
+        window.location.href = "/signin";
+        return;
+      }
+
+      console.log("🔍 Loading applications for applicant...");
+      const response = await fetch("http://localhost:8000/api/applications", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to load applications: ${response.status} ${await response.text()}`);
+      }
+      
+      const data: any[] = await response.json(); // Explicitly type data as any[] for now
+      console.log("API Response Data (Applicant):", data);
+
+      const applicationsData: Application[] = data.map((app: any) => {
+        try {
+          return {
+            id: app.id,
+            application_number: app.application_number || `APP-${app.id}`,
+            product_name: app.product_name || 'نامشخص',
+            product_type_name: app.product_type?.name_fa || 
+                              app.product_type?.name_en || 
+                              app.product_type_name || 
+                              '-',
+            status: app.status,
+            submission_date: app.submission_date,
+            evaluation_level: app.evaluation_level || 'تعیین نشده',
+            applicant_name: app.applicant?.full_name || app.user?.full_name || 'نامشخص',
+            created_at: app.created_at,
+            updated_at: app.updated_at
+          };
+        } catch (error) {
+          console.error("Error transforming application (Applicant):", app, error);
+          return null;
+        }
+      }).filter(Boolean) as Application[];
+
+      console.log("Transformed Data (Applicant):", applicationsData);
+      setApplications(applicationsData);
+      
+      const currentTotal = applicationsData.length;
+      const currentPending = applicationsData.filter((app: Application) => 
+        app.status === 'submitted' || app.status === 'in_review'
+      ).length;
+      const currentApproved = applicationsData.filter((app: Application) => 
+        app.status === 'completed'
+      ).length;
+      const currentRejected = applicationsData.filter((app: Application) => 
+        app.status === 'rejected'
+      ).length;
+      
+      setStats({ total: currentTotal, pending: currentPending, approved: currentApproved, rejected: currentRejected });
+    } catch (error: any) { // Catch block with typed error
+      console.error("❌ Failed to load applications (Applicant):", error);
+      setError(`خطا در بارگذاری درخواست‌ها: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Add a function to refresh applications
+  const refreshApplications = () => {
+    loadApplications();
+  };
+
   useEffect(() => {
     const userData = localStorage.getItem("user");
     if (userData) {
@@ -41,68 +143,12 @@ export default function ApplicantDashboard() {
     }
     
     // Load applications and stats from API
-    const loadData = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          window.location.href = "/signin";
-          return;
-        }
-
-        // Load applications
-        console.log("🔍 Loading applications from /api/applications/my");
-        const applicationsResponse = await fetch("http://localhost:8000/api/applications/my", {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        });
-
-        if (applicationsResponse.ok) {
-          const data: Application[] = await applicationsResponse.json();
-          setApplications(data);
-          console.log("✅ Applications loaded:", data.length);
-          
-          // Calculate stats from applications data
-          const total = data.length;
-          const pending = data.filter((app: Application) => app.status === 'SUBMITTED' || app.status === 'IN_REVIEW').length;
-          const approved = data.filter((app: Application) => app.status === 'COMPLETED').length;
-          const rejected = data.filter((app: Application) => app.status === 'REJECTED').length;
-          
-          setStats({ total, pending, approved, rejected });
-        } else {
-          console.error("❌ Failed to load applications:", applicationsResponse.status);
-          setError(`خطا در بارگیری داده‌ها: ${applicationsResponse.status}`);
-          
-          // Try alternative endpoint for debugging
-          console.log("🔄 Trying alternative endpoint /api/applications/dashboard/list");
-          const dashboardResponse = await fetch("http://localhost:8000/api/applications/dashboard/list", {
-            headers: {
-              "Authorization": `Bearer ${token}`,
-            },
-          });
-          
-          if (dashboardResponse.ok) {
-            const dashboardData: Application[] = await dashboardResponse.json();
-            setApplications(dashboardData);
-            console.log("✅ Dashboard data loaded:", dashboardData.length);
-            
-            const total = dashboardData.length;
-            const pending = dashboardData.filter((app: Application) => app.status === 'SUBMITTED' || app.status === 'IN_REVIEW').length;
-            const approved = dashboardData.filter((app: Application) => app.status === 'COMPLETED').length;
-            const rejected = dashboardData.filter((app: Application) => app.status === 'REJECTED').length;
-            
-            setStats({ total, pending, approved, rejected });
-          }
-        }
-      } catch (error) {
-        console.error("Error loading data:", error);
-        setError("خطا در اتصال به سرور");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
+    loadApplications();
+    
+    // Set up polling to refresh applications every 30 seconds
+    const interval = setInterval(refreshApplications, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const handleLogout = () => {
@@ -127,7 +173,7 @@ export default function ApplicantDashboard() {
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center">
               <h1 className="text-2xl font-bold text-gray-900">
-                پنل متقاضی
+                سامانه ارزیابی معیارهای مشترک ITRC
               </h1>
             </div>
             <div className="flex items-center space-x-4 space-x-reverse">
@@ -144,13 +190,6 @@ export default function ApplicantDashboard() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Error Message */}
-        {error && (
-          <div className="mb-8 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-            <strong>خطا:</strong> {error}
-          </div>
-        )}
-
         {/* Statistics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <motion.div
@@ -249,10 +288,16 @@ export default function ApplicantDashboard() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    شماره درخواست
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     نام محصول
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     نوع محصول
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    سطح ارزیابی
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     وضعیت
@@ -269,18 +314,24 @@ export default function ApplicantDashboard() {
                 {applications.map((app) => (
                   <tr key={app.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {app.application_number}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {app.product_name}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {app.product_type_name}
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {app.evaluation_level || '-'}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                        {app.status}
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusDisplay(app.status).color}`}>
+                        {getStatusDisplay(app.status).text}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {app.submission_date}
+                      {formatDate(app.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <Link
@@ -289,15 +340,24 @@ export default function ApplicantDashboard() {
                       >
                         مشاهده
                       </Link>
-                      <Link
-                        href={`/dashboard/applicant/application/${app.id}/edit`}
-                        className="text-green-600 hover:text-green-900"
-                      >
-                        ویرایش
-                      </Link>
+                      {app.status === 'draft' && (
+                        <Link
+                          href={`/dashboard/applicant/application/${app.id}/edit`}
+                          className="text-green-600 hover:text-green-900 mr-4"
+                        >
+                          ویرایش
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 ))}
+                {applications.length === 0 && !loading && (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
+                      هیچ درخواستی یافت نشد
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

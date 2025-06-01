@@ -5,7 +5,7 @@ from fastapi.security import HTTPBearer
 import uvicorn
 from pathlib import Path
 
-from .routers import auth, users, applications, evaluations, documents, reports, admin
+from .routers import auth, users, applications, evaluations, documents, reports, admin, security_targets
 from .database import engine, Base
 from .core.config import settings
 
@@ -40,6 +40,7 @@ app.include_router(evaluations.router, prefix="/api/evaluations", tags=["Evaluat
 app.include_router(documents.router, prefix="/api/documents", tags=["Documents"])
 app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(security_targets.router, prefix="/api/security-targets", tags=["Security Targets"])
 
 @app.get("/")
 async def root():
