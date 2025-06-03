@@ -154,18 +154,43 @@ export default function SecurityTargetPage() {
       const token = localStorage.getItem("token");
       const formData = JSON.parse(localStorage.getItem("applicationFormData") || "{}");
       
-      // First create the application
+      // Create FormData for the application (backend expects Form data, not JSON)
+      const formDataToSend = new FormData();
+      
+      // Add all form fields as Form data
+      formDataToSend.append('product_name', formData.product_name || '');
+      formDataToSend.append('product_type', formData.product_type || 'Antimalware Software');
+      formDataToSend.append('description', formData.description || '');
+      formDataToSend.append('evaluation_level', formData.evaluation_level || 'EAL1');
+      formDataToSend.append('company_name', formData.company_name || '');
+      formDataToSend.append('contact_person', formData.contact_person || '');
+      formDataToSend.append('contact_email', formData.contact_email || '');
+      formDataToSend.append('contact_phone', formData.contact_phone || '');
+      
+      console.log("📤 Creating application with FormData:", {
+        product_name: formData.product_name,
+        product_type: formData.product_type,
+        description: formData.description,
+        evaluation_level: formData.evaluation_level,
+        company_name: formData.company_name,
+        contact_person: formData.contact_person,
+        contact_email: formData.contact_email,
+        contact_phone: formData.contact_phone
+      });
+      
+      // First create the application with FormData (not JSON)
       const appResponse = await fetch("http://localhost:8000/api/applications/", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json"
+          // Don't set Content-Type header - let browser set it for FormData
         },
-        body: JSON.stringify(formData)
+        body: formDataToSend
       });
 
       if (appResponse.ok) {
         const application = await appResponse.json();
+        console.log("✅ Application created successfully:", application);
         
         // Save security target selections
         for (const selection of selectedClasses) {
@@ -193,14 +218,21 @@ export default function SecurityTargetPage() {
           }
         });
 
-        if (!submitResponse.ok) {
+        if (submitResponse.ok) {
+          console.log("✅ Security target submitted successfully");
+          
+          alert("اهداف امنیتی با موفقیت ثبت شد و درخواست شما در صف بررسی قرار گرفت.");
+          
+          // Clear form data from localStorage
+          localStorage.removeItem("applicationFormData");
+          
+          // Redirect to dashboard
+          window.location.href = "/dashboard/applicant";
+        } else {
           const errorData = await submitResponse.json();
-          throw new Error(errorData.detail || "Failed to submit security target");
+          console.error("❌ Failed to submit security target:", errorData);
+          alert(`خطا در ثبت اهداف امنیتی: ${errorData.detail || 'خطای نامشخص'}`);
         }
-        
-        localStorage.removeItem("applicationFormData");
-        alert("درخواست شما با موفقیت ثبت شد و در صف بررسی قرار گرفت.");
-        window.location.href = "/dashboard/applicant";
       } else {
         const errorData = await appResponse.json();
         console.error("Error creating application:", errorData);

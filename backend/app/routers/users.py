@@ -54,3 +54,34 @@ async def get_product_types(
     """Get list of available product types."""
     product_types = db.query(ProductType).filter(ProductType.is_active == True).all()
     return product_types 
+
+@router.get("/product-types")
+async def get_product_types(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get all available product types."""
+    print(f"🔍 Getting product types for user: {current_user.email}")
+    
+    product_types = db.query(ProductType).filter(ProductType.is_active == True).all()
+    
+    print(f"📦 Found {len(product_types)} product types:")
+    for pt in product_types:
+        print(f"   - {pt.name_en} ({pt.name_fa})")
+    
+    # Format response for frontend
+    response = []
+    for pt in product_types:
+        response.append({
+            "id": pt.id,
+            "name_en": pt.name_en,
+            "name_fa": pt.name_fa,
+            "description_en": pt.description_en,
+            "description_fa": pt.description_fa,
+            "protection_profile": pt.protection_profile,
+            "estimated_days": pt.estimated_days,
+            "estimated_cost": pt.estimated_cost
+        })
+    
+    print(f"✅ Returning {len(response)} product types")
+    return response 
