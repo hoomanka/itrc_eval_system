@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from datetime import datetime
 
@@ -67,9 +67,14 @@ async def get_security_target(
         db.refresh(security_target)
     
     # Load class selections with related data
-    security_target.class_selections = db.query(STClassSelection).filter(
+    class_selections = db.query(STClassSelection).options(
+        joinedload(STClassSelection.product_class),
+        joinedload(STClassSelection.product_subclass)
+    ).filter(
         STClassSelection.security_target_id == security_target.id
     ).all()
+    
+    security_target.class_selections = class_selections
     
     return security_target
 

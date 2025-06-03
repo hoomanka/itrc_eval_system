@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from datetime import datetime
 
 from ..database import get_db
-from ..models import Evaluation, Application, User, UserRole, ApplicationStatus
+from ..models import Evaluation, Application, User, UserRole, ApplicationStatus, EvaluationStatus
 from ..schemas import (
     EvaluationCreate, EvaluationUpdate, Evaluation as EvaluationSchema,
-    MessageResponse
+    EvaluationResponse, MessageResponse, ApplicationBasicInfo, EvaluatorInfo
 )
 from ..core.auth import get_current_active_user, require_role
 
@@ -53,12 +53,28 @@ async def create_evaluation(
         recommendations=evaluation_data.recommendations
     )
     
-    # Update application status
-    application.status = ApplicationStatus.IN_EVALUATION
+    # TEMP: Immediately mark evaluation as completed for testing
+    db_evaluation.status = EvaluationStatus.COMPLETED
+    db_evaluation.end_date = datetime.utcnow()
+    db_evaluation.report_ready_for_generation = True
+    application.status = ApplicationStatus.COMPLETED
+    application.actual_completion_date = datetime.utcnow()
     
     db.add(db_evaluation)
     db.commit()
     db.refresh(db_evaluation)
+    
+    # Automatically generate a technical report for this evaluation
+    from ..services.report_generator import TechnicalReportGenerator
+    generator = TechnicalReportGenerator(db)
+    try:
+        generator.generate_technical_report(
+            evaluation_id=db_evaluation.id,
+            generated_by_id=current_user.id,
+            title=f"Evaluation Technical Report for {application.product_name}"
+        )
+    except Exception as e:
+        print(f"[ERROR] Failed to auto-generate report: {e}")
     
     return db_evaluation
 
@@ -73,15 +89,59 @@ async def get_evaluations(
     query = db.query(Evaluation)
     
     if current_user.role == UserRole.EVALUATOR:
-        # Evaluators see only their own evaluations
-        query = query.filter(Evaluation.evaluator_id == current_user.id)
+        query = query.filter(Evaluation.evaluator_id == current_user.id)  # Include all, including completed
     elif current_user.role == UserRole.APPLICANT:
-        # Applicants see evaluations of their applications
         query = query.join(Application).filter(Application.applicant_id == current_user.id)
     # Governance and Admin see all evaluations
     
     evaluations = query.offset(skip).limit(limit).all()
     return evaluations
+
+@router.get("/my")
+async def get_my_evaluations(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get current evaluator's evaluations (restoring DB query, simple response)."""
+    print(f"DEBUG: Evaluations endpoint hit for user ID: {current_user.id} with role: {current_user.role}. Restoring DB query.")
+    
+    if not current_user or not current_user.is_active:
+        print(f"DEBUG: User {current_user.id if current_user else 'Unknown'} not authenticated or inactive.")
+        raise HTTPException(status_code=401, detail="User not authenticated or inactive")
+    if current_user.role != UserRole.EVALUATOR:
+        print(f"DEBUG: User {current_user.id} role {current_user.role} is not EVALUATOR.")
+        raise HTTPException(status_code=403, detail="Access denied: Evaluator role required")
+
+    try:
+        evaluations = db.query(Evaluation).filter(
+            Evaluation.evaluator_id == current_user.id
+        ).all()
+        print(f"DEBUG: Raw evaluations count from DB: {len(evaluations)}")
+    except Exception as db_error:
+        print(f"DEBUG: Database query error: {str(db_error)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
+    
+    result = []
+    for eval_item in evaluations:
+        try:
+            eval_dict = {
+                "id": eval_item.id,
+                "application_id": eval_item.application_id,
+                "evaluator_id": eval_item.evaluator_id,
+                "status": eval_item.status.value if eval_item.status else EvaluationStatus.IN_PROGRESS.value,
+                # Add other essential fields the frontend might immediately need for display
+                # For example, if the frontend shows application name or product name:
+                # "application_name": eval_item.application.name if eval_item.application else "N/A",
+                # "product_name": eval_item.application.product_name if eval_item.application else "N/A",
+            }
+            result.append(eval_dict)
+        except Exception as proc_error:
+            print(f"DEBUG: Error processing evaluation {eval_item.id}: {str(proc_error)}")
+            # Optionally, append a placeholder or skip
+            continue
+            
+    print(f"DEBUG: Processed evaluations for response: {len(result)} results")
+    return result
 
 @router.get("/{evaluation_id}", response_model=EvaluationSchema)
 async def get_evaluation(
@@ -161,14 +221,12 @@ async def complete_evaluation(
             detail="ارزیابی مورد نظر یافت نشد"
         )
     
-    # Check permissions
     if current_user.role == UserRole.EVALUATOR and evaluation.evaluator_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="دسترسی غیرمجاز"
         )
     
-    # Check if all required steps are completed
     if not all([
         evaluation.document_review_completed,
         evaluation.security_testing_completed,
@@ -179,24 +237,10 @@ async def complete_evaluation(
             detail="همه مراحل ارزیابی باید تکمیل شوند"
         )
     
-    # Check if all required reports are created
-    from ..models import Report, ReportType
-    required_reports = [ReportType.ETR, ReportType.TRP, ReportType.VTR]
-    existing_reports = db.query(Report).filter(Report.evaluation_id == evaluation_id).all()
-    existing_report_types = [report.report_type for report in existing_reports]
-    
-    missing_reports = set(required_reports) - set(existing_report_types)
-    if missing_reports:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"گزارش‌های زیر ایجاد نشده‌اند: {', '.join([r.value for r in missing_reports])}"
-        )
-    
-    # Complete evaluation
     evaluation.status = "completed"
     evaluation.end_date = datetime.utcnow()
+    evaluation.report_ready_for_generation = True  # Set flag for frontend to handle
     
-    # Update application status
     evaluation.application.status = ApplicationStatus.COMPLETED
     evaluation.application.actual_completion_date = datetime.utcnow()
     
@@ -266,15 +310,4 @@ async def assign_evaluator(
     evaluation.evaluator_id = evaluator_id
     db.commit()
     
-    return MessageResponse(message=f"ارزیابی به {new_evaluator.full_name} واگذار شد")
-
-@router.get("/my", response_model=List[EvaluationSchema])
-async def get_my_evaluations(
-    current_user: User = Depends(require_role([UserRole.EVALUATOR])),
-    db: Session = Depends(get_db)
-):
-    """Get current evaluator's evaluations."""
-    evaluations = db.query(Evaluation).filter(
-        Evaluation.evaluator_id == current_user.id
-    ).all()
-    return evaluations 
+    return MessageResponse(message=f"ارزیابی به {new_evaluator.full_name} واگذار شد") 

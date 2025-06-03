@@ -9,6 +9,7 @@ from .database import Base
 class UserRole(str, enum.Enum):
     APPLICANT = "applicant"
     EVALUATOR = "evaluator"
+    SUPERVISOR = "supervisor"  # Added supervisor role
     GOVERNANCE = "governance"
     ADMIN = "admin"
 
@@ -17,6 +18,9 @@ class ApplicationStatus(str, enum.Enum):
     SUBMITTED = "submitted"
     IN_REVIEW = "in_review"
     IN_EVALUATION = "in_evaluation"
+    EVALUATION_COMPLETED = "evaluation_completed"  # New status for completed evaluation
+    REPORT_GENERATED = "report_generated"  # New status for generated technical report
+    SUPERVISOR_REVIEW = "supervisor_review"  # New status for supervisor review
     COMPLETED = "completed"
     REJECTED = "rejected"
 
@@ -38,6 +42,14 @@ class ReportType(str, enum.Enum):
     TRP = "test_report"  # Test Report
     VTR = "validation_test_report"  # Validation Test Report
 
+class ReportStatus(str, enum.Enum):
+    DRAFT = "draft"
+    GENERATED = "generated"
+    SUPERVISOR_REVIEW = "supervisor_review"
+    APPROVED = "approved"
+    NEEDS_REVISION = "needs_revision"
+    REJECTED = "rejected"
+
 class User(Base):
     __tablename__ = "users"
     
@@ -48,6 +60,7 @@ class User(Base):
     role = Column(Enum(UserRole), nullable=False)
     company = Column(String, nullable=True)  # For applicants
     phone = Column(String, nullable=True)
+    supervisor_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # For evaluator-supervisor relationship
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -55,6 +68,8 @@ class User(Base):
     # Relationships
     applications = relationship("Application", back_populates="applicant")
     evaluations = relationship("Evaluation", back_populates="evaluator")
+    supervised_evaluators = relationship("User", remote_side=[id])  # Supervisor's evaluators
+    supervisor = relationship("User", remote_side=[id])  # Evaluator's supervisor
 
 class ProductType(Base):
     __tablename__ = "product_types"
@@ -134,6 +149,11 @@ class Document(Base):
     application = relationship("Application", back_populates="documents")
     uploader = relationship("User")
 
+class EvaluationStatus(str, enum.Enum):
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    ON_HOLD = "ON_HOLD"
+
 class Evaluation(Base):
     __tablename__ = "evaluations"
     
@@ -143,50 +163,75 @@ class Evaluation(Base):
     
     start_date = Column(DateTime, default=datetime.utcnow)
     end_date = Column(DateTime, nullable=True)
-    status = Column(String, default="in_progress")  # in_progress, completed, on_hold
+    status = Column(Enum(EvaluationStatus), default=EvaluationStatus.IN_PROGRESS)
     
     # Evaluation progress
-    document_review_completed = Column(Boolean, default=False)
-    security_testing_completed = Column(Boolean, default=False)
-    vulnerability_assessment_completed = Column(Boolean, default=False)
+    document_review_completed = Column(Boolean, default=False, nullable=False)
+    security_testing_completed = Column(Boolean, default=False, nullable=False)
+    vulnerability_assessment_completed = Column(Boolean, default=False, nullable=False)
     
     # Overall scores and findings
     overall_score = Column(Float, nullable=True)
-    findings = Column(Text)
-    recommendations = Column(Text)
+    findings = Column(Text, nullable=True)
+    recommendations = Column(Text, nullable=True)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Report generation tracking
+    report_ready_for_generation = Column(Boolean, default=False, nullable=False)
+    report_generated_at = Column(DateTime, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     
     # Relationships
     application = relationship("Application", back_populates="evaluation")
     evaluator = relationship("User", back_populates="evaluations")
-    reports = relationship("Report", back_populates="evaluation")
+    reports = relationship("TechnicalReport", back_populates="evaluation")
 
-class Report(Base):
-    __tablename__ = "reports"
+class TechnicalReport(Base):
+    __tablename__ = "technical_reports"
     
     id = Column(Integer, primary_key=True, index=True)
     evaluation_id = Column(Integer, ForeignKey("evaluations.id"))
-    report_type = Column(Enum(ReportType), nullable=False)
+    report_number = Column(String, unique=True, nullable=False)  # Auto-generated unique number
     
+    # Report metadata
     title = Column(String, nullable=False)
-    content = Column(Text)  # Can store HTML or markdown
+    report_type = Column(Enum(ReportType), default=ReportType.ETR)
     template_version = Column(String, default="1.0")
     
-    is_draft = Column(Boolean, default=True)
-    is_approved = Column(Boolean, default=False)
-    approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    approval_date = Column(DateTime, nullable=True)
+    # Report status and workflow
+    status = Column(Enum(ReportStatus), default=ReportStatus.DRAFT)
+    generated_by = Column(Integer, ForeignKey("users.id"))  # Evaluator who generated
+    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # Supervisor who reviewed
     
-    file_path = Column(String, nullable=True)  # PDF export path
+    # Dates
+    generated_at = Column(DateTime, nullable=True)
+    submitted_for_review_at = Column(DateTime, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    
+    # Report content and files
+    executive_summary = Column(Text)
+    evaluation_methodology = Column(Text)
+    findings_summary = Column(Text)
+    conclusions = Column(Text)
+    supervisor_comments = Column(Text)
+    
+    # File storage
+    word_file_path = Column(String, nullable=True)  # Generated Word document
+    pdf_file_path = Column(String, nullable=True)   # Generated PDF
+    file_size = Column(Integer, nullable=True)
+    
+    # Report data (JSON structure for dynamic content)
+    report_data = Column(JSON)  # All evaluation data structured for report generation
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     evaluation = relationship("Evaluation", back_populates="reports")
-    approver = relationship("User", foreign_keys=[approved_by])
+    generator = relationship("User", foreign_keys=[generated_by])
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
 
 class ProtectionProfile(Base):
     __tablename__ = "protection_profiles"
@@ -225,6 +270,7 @@ class ProductClass(Base):
     code = Column(String, unique=True, nullable=False)  # e.g., "FAM_CRY", "FAM_MAL"
     description_en = Column(Text)
     description_fa = Column(Text)
+    weight = Column(Float, default=1.0)  # Weight for scoring calculations
     order = Column(Integer, default=0)  # Display order
     is_active = Column(Boolean, default=True)
     

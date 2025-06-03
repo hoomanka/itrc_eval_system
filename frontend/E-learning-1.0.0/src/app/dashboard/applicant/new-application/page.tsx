@@ -1,8 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+
+interface ProductType {
+  id: number;
+  name_en: string;
+  name_fa: string;
+  description_en: string;
+  description_fa: string;
+}
 
 export default function NewApplicationPage() {
   const [formData, setFormData] = useState({
@@ -32,6 +40,9 @@ export default function NewApplicationPage() {
     ava_van: null,    // Vulnerability Analysis
   });
 
+  const [productTypes, setProductTypes] = useState<ProductType[]>([]);
+  const [loadingProductTypes, setLoadingProductTypes] = useState(true);
+
   const documentTypes = [
     { key: "st", name: "Security Target (ST)", required: false },
     { key: "alc_cmc", name: "Configuration Management Capabilities (ALC_CMC)", required: false },
@@ -47,17 +58,6 @@ export default function NewApplicationPage() {
     { key: "ava_van", name: "Vulnerability Analysis (AVA_VAN)", required: false },
   ];
 
-  const productTypes = [
-    "Operating System", "Database Management System", "Network Security Gateway",
-    "Intrusion Detection System", "Firewall", "Antivirus Software",
-    "Smart Card", "Biometric System", "PKI System", "VPN Gateway",
-    "Web Application Firewall", "Email Security Gateway", "Mobile Device Management",
-    "Cloud Security Platform", "Endpoint Protection", "Network Access Control",
-    "Security Information and Event Management", "Data Loss Prevention",
-    "Identity and Access Management", "Cryptographic Module",
-    // ... و 50 نوع دیگر
-  ];
-
   const evaluationLevels = [
     { value: "EAL1", name: "EAL1 - Functionally Tested" },
     { value: "EAL2", name: "EAL2 - Structurally Tested" },
@@ -70,6 +70,56 @@ export default function NewApplicationPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Load product types from backend
+  useEffect(() => {
+    const loadProductTypes = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          console.error("❌ No token found");
+          return;
+        }
+
+        console.log("🔍 Loading product types from backend...");
+        const response = await fetch("http://localhost:8000/api/users/product-types", {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log("✅ Product types loaded:", data);
+          setProductTypes(data);
+        } else {
+          console.error("❌ Failed to load product types:", response.status);
+          // Fallback to default antimalware type
+          setProductTypes([{
+            id: 1,
+            name_en: "Antimalware Software",
+            name_fa: "نرم‌افزار ضد بدافزار",
+            description_en: "Antimalware software products",
+            description_fa: "محصولات نرم‌افزاری ضد بدافزار"
+          }]);
+        }
+      } catch (error) {
+        console.error("❌ Error loading product types:", error);
+        // Fallback to default antimalware type
+        setProductTypes([{
+          id: 1,
+          name_en: "Antimalware Software", 
+          name_fa: "نرم‌افزار ضد بدافزار",
+          description_en: "Antimalware software products",
+          description_fa: "محصولات نرم‌افزاری ضد بدافزار"
+        }]);
+      } finally {
+        setLoadingProductTypes(false);
+      }
+    };
+
+    loadProductTypes();
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({
@@ -90,9 +140,9 @@ export default function NewApplicationPage() {
     setLoading(true);
     setError("");
     
-    // Check if antivirus product is selected
-    if (formData.product_type === "Antivirus Software") {
-      console.log("🔍 Antivirus product selected, saving form data:", formData);
+    // Check if antimalware product is selected (updated name)
+    if (formData.product_type === "Antimalware Software") {
+      console.log("🔍 Antimalware product selected, saving form data:", formData);
       // Save form data to localStorage
       localStorage.setItem("applicationFormData", JSON.stringify(formData));
       console.log("✅ Form data saved to localStorage");
@@ -116,12 +166,22 @@ export default function NewApplicationPage() {
       Object.keys(formData).forEach(key => {
         formDataToSend.append(key, formData[key as keyof typeof formData]);
       });
+      
+      // Explicitly set status to 'submitted' for new applications
+      formDataToSend.append('status', 'submitted');
 
       // Add documents
       Object.keys(documents).forEach(docType => {
         if (documents[docType]) {
           formDataToSend.append(`document_${docType}`, documents[docType] as File);
         }
+      });
+
+      console.log("📤 Submitting new application...");
+      console.log("📋 Form data being sent:", {
+        ...formData,
+        status: 'submitted',
+        documents: Object.keys(documents).filter(key => documents[key] !== null)
       });
 
       const response = await fetch("http://localhost:8000/api/applications/", {
@@ -132,16 +192,26 @@ export default function NewApplicationPage() {
         body: formDataToSend,
       });
 
+      console.log("📡 Response status:", response.status);
+
       if (response.ok) {
         const result = await response.json();
+        console.log("✅ Application submitted successfully:", result);
         alert("درخواست شما با موفقیت ثبت شد و در صف بررسی قرار گرفت.");
+        
+        // Clear any cached form data
+        localStorage.removeItem("applicationFormData");
+        
         window.location.href = "/dashboard/applicant";
       } else {
         const errorData = await response.json();
+        console.error("❌ Error response:", errorData);
+        setError(errorData.detail || "خطا در ثبت درخواست");
         alert(errorData.detail || "خطا در ثبت درخواست");
       }
     } catch (err) {
-      console.error("Error submitting application:", err);
+      console.error("❌ Error submitting application:", err);
+      setError("خطا در اتصال به سرور");
       alert("خطا در اتصال به سرور");
     } finally {
       setLoading(false);
@@ -149,13 +219,13 @@ export default function NewApplicationPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50" dir="rtl">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50" dir="rtl">
       {/* Header */}
-      <header className="bg-white shadow-sm">
+      <header className="bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center">
-              <Link href="/dashboard/applicant" className="text-blue-600 hover:text-blue-700 ml-4">
+              <Link href="/dashboard/applicant" className="text-blue-600 hover:text-blue-700 ml-4 transition-colors">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
@@ -177,50 +247,66 @@ export default function NewApplicationPage() {
           className="space-y-8"
         >
           {/* Product Information */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">اطلاعات محصول</h2>
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+            <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+              <svg className="w-6 h-6 text-blue-600 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-2m-14 0h2m-2 0h-2m16 0v-3.5c0-.621-.504-1.125-1.125-1.125h-3.75c-.621 0-1.125.504-1.125 1.125V21" />
+              </svg>
+              اطلاعات محصول
+            </h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  نام محصول
+                  نام محصول *
                 </label>
                 <input
                   type="text"
                   name="product_name"
+                  required
                   value={formData.product_name}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                   placeholder="نام محصول را وارد کنید"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  نوع محصول
+                  نوع محصول *
                 </label>
-                <select
-                  name="product_type"
-                  value={formData.product_type}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">انتخاب کنید</option>
-                  {productTypes.map((type, index) => (
-                    <option key={index} value={type}>{type}</option>
-                  ))}
-                </select>
+                {loadingProductTypes ? (
+                  <div className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
+                    در حال بارگیری...
+                  </div>
+                ) : (
+                  <select
+                    name="product_type"
+                    required
+                    value={formData.product_type}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  >
+                    <option value="">انتخاب کنید</option>
+                    {productTypes.map((type) => (
+                      <option key={type.id} value={type.name_en}>
+                        {type.name_fa} ({type.name_en})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  سطح ارزیابی هدف
+                  سطح ارزیابی هدف *
                 </label>
                 <select
                   name="evaluation_level"
+                  required
                   value={formData.evaluation_level}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                 >
                   {evaluationLevels.map((level) => (
                     <option key={level.value} value={level.value}>{level.name}</option>
@@ -230,14 +316,15 @@ export default function NewApplicationPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  نام شرکت
+                  نام شرکت *
                 </label>
                 <input
                   type="text"
                   name="company_name"
+                  required
                   value={formData.company_name}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                   placeholder="نام شرکت یا سازمان"
                 />
               </div>
@@ -252,128 +339,87 @@ export default function NewApplicationPage() {
                 rows={4}
                 value={formData.description}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                 placeholder="توضیح مختصری از محصول و قابلیت‌های امنیتی آن"
               />
             </div>
+
+            {/* Special notice for antimalware products */}
+            {formData.product_type === "Antimalware Software" && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                transition={{ duration: 0.3 }}
+                className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg"
+              >
+                <div className="flex items-center">
+                  <svg className="w-5 h-5 text-blue-600 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-blue-800 font-medium">
+                    محصول ضد بدافزار انتخاب شده است
+                  </p>
+                </div>
+                <p className="text-blue-700 text-sm mt-2">
+                  پس از ثبت اطلاعات، به صفحه انتخاب کلاس‌های امنیتی هدایت خواهید شد.
+                </p>
+              </motion.div>
+            )}
           </div>
 
           {/* Contact Information */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">اطلاعات تماس</h2>
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+            <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+              <svg className="w-6 h-6 text-green-600 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+              </svg>
+              اطلاعات تماس
+            </h2>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  نام و نام خانوادگی مسئول
+                  نام و نام خانوادگی مسئول *
                 </label>
                 <input
                   type="text"
                   name="contact_person"
+                  required
                   value={formData.contact_person}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  placeholder="نام کامل مسئول پروژه"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  ایمیل
+                  ایمیل *
                 </label>
                 <input
                   type="email"
                   name="contact_email"
+                  required
                   value={formData.contact_email}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  placeholder="example@company.com"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  شماره تماس
+                  شماره تماس *
                 </label>
                 <input
                   type="tel"
                   name="contact_phone"
+                  required
                   value={formData.contact_phone}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  placeholder="021-12345678"
                 />
-              </div>
-            </div>
-          </div>
-
-          {/* Document Upload */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">آپلود اسناد</h2>
-            <p className="text-gray-600 mb-6">
-              آپلود اسناد Common Criteria اختیاری است. شما می‌توانید ابتدا درخواست خود را ثبت کنید و سپس اسناد را ارسال کنید.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {documentTypes.map((docType) => (
-                <div key={docType.key} className="border border-gray-200 rounded-lg p-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {docType.name}
-                  </label>
-                  <input
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    onChange={(e) => handleFileChange(docType.key, e.target.files?.[0] || null)}
-                    className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                  />
-                  {documents[docType.key] && (
-                    <p className="text-green-600 text-sm mt-1">
-                      ✓ {documents[docType.key]?.name}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-              <h3 className="font-medium text-blue-900 mb-2">راهنمای آپلود اسناد:</h3>
-              <ul className="text-blue-800 text-sm space-y-1">
-                <li>• فرمت مجاز فایل‌ها: PDF, DOC, DOCX</li>
-                <li>• حداکثر حجم هر فایل: 10 مگابایت</li>
-                <li>• اسناد باید مطابق با استانداردهای Common Criteria تهیه شده باشند</li>
-                <li>• در صورت نیاز به راهنمایی، با تیم پشتیبانی تماس بگیرید</li>
-              </ul>
-            </div>
-          </div>
-
-          {/* Evaluation Process Info */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">فرآیند ارزیابی</h2>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="text-center p-4 border rounded-lg">
-                <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-2 text-xl font-bold">
-                  1
-                </div>
-                <h3 className="font-medium text-gray-900 mb-1">ثبت درخواست</h3>
-                <p className="text-sm text-gray-600">ارسال فرم و اسناد لازم</p>
-              </div>
-              <div className="text-center p-4 border rounded-lg">
-                <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-2 text-xl font-bold">
-                  2
-                </div>
-                <h3 className="font-medium text-gray-900 mb-1">بررسی اولیه</h3>
-                <p className="text-sm text-gray-600">تایید مدارک توسط تیم حاکمیت</p>
-              </div>
-              <div className="text-center p-4 border rounded-lg">
-                <div className="w-12 h-12 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mx-auto mb-2 text-xl font-bold">
-                  3
-                </div>
-                <h3 className="font-medium text-gray-900 mb-1">ارزیابی فنی</h3>
-                <p className="text-sm text-gray-600">انجام تست‌ها توسط ارزیاب</p>
-              </div>
-              <div className="text-center p-4 border rounded-lg">
-                <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-2 text-xl font-bold">
-                  4
-                </div>
-                <h3 className="font-medium text-gray-900 mb-1">صدور گواهی</h3>
-                <p className="text-sm text-gray-600">تهیه گزارش و گواهی نهایی</p>
               </div>
             </div>
           </div>
@@ -382,14 +428,14 @@ export default function NewApplicationPage() {
           <div className="flex justify-end space-x-4 space-x-reverse">
             <Link
               href="/dashboard/applicant"
-              className="px-6 py-3 border border-gray-300 rounded-md text-gray-700 hover:text-gray-900 hover:border-gray-400 transition duration-200"
+              className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:text-gray-900 hover:border-gray-400 transition-colors"
             >
               انصراف
             </Link>
             <button
               type="submit"
-              disabled={loading}
-              className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white rounded-md font-medium transition duration-200 flex items-center"
+              disabled={loading || loadingProductTypes}
+              className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center"
             >
               {loading ? (
                 <>
@@ -400,7 +446,7 @@ export default function NewApplicationPage() {
                   در حال ثبت...
                 </>
               ) : (
-                "ثبت درخواست"
+                formData.product_type === "Antimalware Software" ? "ادامه و انتخاب کلاس‌ها" : "ثبت درخواست"
               )}
             </button>
           </div>

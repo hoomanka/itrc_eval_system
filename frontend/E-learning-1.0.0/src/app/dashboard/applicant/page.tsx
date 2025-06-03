@@ -15,7 +15,9 @@ interface Application {
   id: number;
   application_number: string;
   product_name: string;
-  product_type_name: string;
+  product_type: string;
+  company_name: string;
+  description?: string;
   status: string;
   submission_date: string | null;
   evaluation_level?: string;
@@ -35,6 +37,7 @@ export default function ApplicantDashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
   // Function to translate status to Persian
   const getStatusDisplay = (status: string) => {
@@ -75,30 +78,36 @@ export default function ApplicantDashboard() {
       const response = await fetch("http://localhost:8000/api/applications", {
         headers: {
           "Authorization": `Bearer ${token}`,
+          "Cache-Control": "no-cache",
         },
       });
       
+      console.log("📡 Response status:", response.status);
+      
       if (!response.ok) {
-        throw new Error(`Failed to load applications: ${response.status} ${await response.text()}`);
+        const errorText = await response.text();
+        console.error("❌ API Error:", errorText);
+        throw new Error(`Failed to load applications: ${response.status} ${errorText}`);
       }
       
-      const data: any[] = await response.json(); // Explicitly type data as any[] for now
-      console.log("API Response Data (Applicant):", data);
+      const data: any[] = await response.json();
+      console.log("📊 Raw API Response Data (Applicant):", data);
+      console.log("📊 Number of applications received:", data.length);
 
-      const applicationsData: Application[] = data.map((app: any) => {
+      const applicationsData: Application[] = data.map((app: any, index: number) => {
         try {
+          console.log(`🔍 Processing application ${index + 1}:`, app);
           return {
             id: app.id,
             application_number: app.application_number || `APP-${app.id}`,
             product_name: app.product_name || 'نامشخص',
-            product_type_name: app.product_type?.name_fa || 
-                              app.product_type?.name_en || 
-                              app.product_type_name || 
-                              '-',
+            product_type: app.product_type_name || app.product_type || '-',
+            company_name: app.applicant_name || app.company_name || '-',
+            description: app.description,
             status: app.status,
             submission_date: app.submission_date,
             evaluation_level: app.evaluation_level || 'تعیین نشده',
-            applicant_name: app.applicant?.full_name || app.user?.full_name || 'نامشخص',
+            applicant_name: app.applicant_name || app.company_name || 'نامشخص',
             created_at: app.created_at,
             updated_at: app.updated_at
           };
@@ -108,8 +117,9 @@ export default function ApplicantDashboard() {
         }
       }).filter(Boolean) as Application[];
 
-      console.log("Transformed Data (Applicant):", applicationsData);
+      console.log("✅ Transformed Data (Applicant):", applicationsData);
       setApplications(applicationsData);
+      setLastRefresh(new Date());
       
       const currentTotal = applicationsData.length;
       const currentPending = applicationsData.filter((app: Application) => 
@@ -123,7 +133,8 @@ export default function ApplicantDashboard() {
       ).length;
       
       setStats({ total: currentTotal, pending: currentPending, approved: currentApproved, rejected: currentRejected });
-    } catch (error: any) { // Catch block with typed error
+      console.log("📈 Stats updated:", { total: currentTotal, pending: currentPending, approved: currentApproved, rejected: currentRejected });
+    } catch (error: any) {
       console.error("❌ Failed to load applications (Applicant):", error);
       setError(`خطا در بارگذاری درخواست‌ها: ${error.message}`);
     } finally {
@@ -133,6 +144,7 @@ export default function ApplicantDashboard() {
 
   // Add a function to refresh applications
   const refreshApplications = () => {
+    console.log("🔄 Manual refresh triggered");
     loadApplications();
   };
 
@@ -146,7 +158,10 @@ export default function ApplicantDashboard() {
     loadApplications();
     
     // Set up polling to refresh applications every 30 seconds
-    const interval = setInterval(refreshApplications, 30000);
+    const interval = setInterval(() => {
+      console.log("⏰ Auto-refresh triggered");
+      refreshApplications();
+    }, 30000);
     
     return () => clearInterval(interval);
   }, []);
@@ -157,7 +172,7 @@ export default function ApplicantDashboard() {
     window.location.href = "/";
   };
 
-  if (loading) {
+  if (loading && !applications.length) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
@@ -190,6 +205,13 @@ export default function ApplicantDashboard() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Error Display */}
+        {error && (
+          <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-700">{error}</p>
+          </div>
+        )}
+
         {/* Statistics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <motion.div
@@ -280,8 +302,36 @@ export default function ApplicantDashboard() {
 
         {/* Applications List */}
         <div className="bg-white rounded-lg shadow">
-          <div className="px-6 py-4 border-b border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
             <h2 className="text-xl font-semibold text-gray-900">درخواست‌های من</h2>
+            <div className="flex items-center space-x-2 space-x-reverse">
+              {lastRefresh && (
+                <span className="text-sm text-gray-500">
+                  آخرین بروزرسانی: {new Intl.DateTimeFormat('fa-IR', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                  }).format(lastRefresh)}
+                </span>
+              )}
+              <button
+                onClick={refreshApplications}
+                disabled={loading}
+                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-md flex items-center"
+              >
+                {loading ? (
+                  <svg className="animate-spin h-4 w-4 ml-2" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                )}
+                بروزرسانی
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -292,6 +342,9 @@ export default function ApplicantDashboard() {
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     نام محصول
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    شرکت
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     نوع محصول
@@ -320,7 +373,10 @@ export default function ApplicantDashboard() {
                       {app.product_name}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {app.product_type_name}
+                      {app.company_name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {app.product_type}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {app.evaluation_level || '-'}
@@ -353,7 +409,7 @@ export default function ApplicantDashboard() {
                 ))}
                 {applications.length === 0 && !loading && (
                   <tr>
-                    <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
+                    <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
                       هیچ درخواستی یافت نشد
                     </td>
                   </tr>
@@ -362,6 +418,21 @@ export default function ApplicantDashboard() {
             </table>
           </div>
         </div>
+
+        {/* Debug Information */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-8 bg-gray-100 rounded-lg p-4">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">Debug Info:</h3>
+            <pre className="text-xs text-gray-600 overflow-auto">
+              {JSON.stringify({
+                totalApplications: applications.length,
+                stats,
+                lastRefresh: lastRefresh?.toISOString(),
+                user: user?.email
+              }, null, 2)}
+            </pre>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, validator, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from .models import UserRole, ApplicationStatus, DocumentType, ReportType
+from enum import Enum
+from .models import UserRole, ApplicationStatus, DocumentType, ReportType, ReportStatus
 
 # Base schemas
 class BaseSchema(BaseModel):
@@ -109,6 +110,26 @@ class Application(ApplicationBase):
     class Config:
         from_attributes = True
 
+class ApplicationDetail(BaseModel):
+    """Simplified application detail response for frontend"""
+    id: int
+    application_number: str
+    product_name: str
+    product_type: str  # Product type name as string
+    description: Optional[str] = None
+    evaluation_level: Optional[str] = "EAL1"
+    company_name: Optional[str] = None
+    contact_person: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    status: str
+    submission_date: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+    class Config:
+        from_attributes = True
+
 class ApplicationSummary(BaseModel):
     id: int
     application_number: str
@@ -148,9 +169,6 @@ class Document(DocumentBase):
 class EvaluationBase(BaseModel):
     findings: Optional[str] = None
     recommendations: Optional[str] = None
-
-class EvaluationCreate(EvaluationBase):
-    application_id: int
 
 class EvaluationUpdate(BaseModel):
     status: Optional[str] = None
@@ -356,6 +374,209 @@ class EvaluationHelpSchema(BaseModel):
     help_text_fa: str
     evaluation_criteria: Optional[dict] = None
     examples: Optional[dict] = None
+    
+    class Config:
+        from_attributes = True
+
+# Technical Report Schemas
+class TechnicalReportBase(BaseModel):
+    title: str
+    report_type: ReportType = ReportType.ETR
+    executive_summary: Optional[str] = None
+    evaluation_methodology: Optional[str] = None
+    findings_summary: Optional[str] = None
+    conclusions: Optional[str] = None
+
+class TechnicalReportCreate(TechnicalReportBase):
+    evaluation_id: int
+
+class TechnicalReportUpdate(BaseModel):
+    title: Optional[str] = None
+    status: Optional[ReportStatus] = None
+    executive_summary: Optional[str] = None
+    evaluation_methodology: Optional[str] = None
+    findings_summary: Optional[str] = None
+    conclusions: Optional[str] = None
+    supervisor_comments: Optional[str] = None
+
+class EvaluatorInfo(BaseModel):
+    id: int
+    full_name: str
+    email: str
+    company: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class SupervisorInfo(BaseModel):
+    id: int
+    full_name: str
+    email: str
+    company: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class EvaluationBasicInfo(BaseModel):
+    id: int
+    start_date: datetime
+    end_date: Optional[datetime] = None
+    status: str
+    overall_score: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+class ApplicationBasicInfo(BaseModel):
+    id: int
+    application_number: str
+    product_name: str
+    product_version: Optional[str] = None
+    company_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class TechnicalReportResponse(TechnicalReportBase):
+    id: int
+    report_number: str
+    status: ReportStatus
+    template_version: str
+    
+    # Relationships
+    evaluation_id: int
+    evaluation: Optional[EvaluationBasicInfo] = None
+    
+    # Workflow information
+    generated_by: int
+    generator: Optional[EvaluatorInfo] = None
+    reviewed_by: Optional[int] = None
+    reviewer: Optional[SupervisorInfo] = None
+    
+    # Dates
+    generated_at: Optional[datetime] = None
+    submitted_for_review_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    approved_at: Optional[datetime] = None
+    
+    # Comments and feedback
+    supervisor_comments: Optional[str] = None
+    
+    # File information
+    word_file_path: Optional[str] = None
+    pdf_file_path: Optional[str] = None
+    file_size: Optional[int] = None
+    
+    # Report data (structured evaluation data)
+    report_data: Optional[Dict[str, Any]] = None
+    
+    # Timestamps
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Enhanced User schemas for supervisor relationship
+class UserBaseEnhanced(UserBase):
+    supervisor_id: Optional[int] = None
+
+class UserCreateEnhanced(UserBaseEnhanced):
+    password: str
+
+class UserUpdateEnhanced(BaseModel):
+    full_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    company: Optional[str] = None
+    phone: Optional[str] = None
+    supervisor_id: Optional[int] = None
+    is_active: Optional[bool] = None
+
+class UserResponseEnhanced(User):
+    supervisor_id: Optional[int] = None
+    supervisor: Optional["User"] = None
+    supervised_evaluators: Optional[List["User"]] = None
+
+    class Config:
+        from_attributes = True
+
+# Enhanced Evaluation schemas with report generation tracking
+class EvaluationCreate(BaseModel):
+    application_id: int
+    evaluator_id: int
+    findings: Optional[str] = None
+    recommendations: Optional[str] = None
+
+class EvaluationResponse(BaseModel):
+    id: int
+    application_id: int
+    evaluator_id: int
+    start_date: datetime
+    end_date: Optional[datetime] = None
+    status: str = "in_progress"
+    document_review_completed: bool = False
+    security_testing_completed: bool = False
+    vulnerability_assessment_completed: bool = False
+    overall_score: Optional[float] = None
+    findings: Optional[str] = ""
+    recommendations: Optional[str] = ""
+    report_ready_for_generation: bool = False
+    report_generated_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    # Relationships
+    application: Optional[ApplicationBasicInfo] = None
+    evaluator: Optional[EvaluatorInfo] = None
+    reports: Optional[List[TechnicalReportResponse]] = []
+
+    class Config:
+        from_attributes = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }
+
+# Report generation request schema
+class ReportGenerationRequest(BaseModel):
+    title: Optional[str] = None
+    notes: Optional[str] = None
+
+# Report review request schema
+class ReportReviewRequest(BaseModel):
+    status: ReportStatus
+    supervisor_comments: Optional[str] = None
+    
+    @validator('status')
+    def validate_review_status(cls, v):
+        from .models import ReportStatus
+        valid_statuses = [ReportStatus.APPROVED, ReportStatus.NEEDS_REVISION, ReportStatus.REJECTED]
+        if v not in valid_statuses:
+            raise ValueError(f'Status must be one of: {[s.value for s in valid_statuses]}')
+        return v
+
+# Dashboard summary schemas
+class EvaluatorDashboardSummary(BaseModel):
+    total_evaluations: int
+    active_evaluations: int
+    completed_evaluations: int
+    reports_generated: int
+    reports_pending_review: int
+    reports_approved: int
+
+class SupervisorDashboardSummary(BaseModel):
+    total_supervised_evaluators: int
+    total_reports_to_review: int
+    reports_pending_review: int
+    reports_reviewed_today: int
+    total_approved_reports: int
+
+# Report statistics schema
+class ReportStatistics(BaseModel):
+    total_reports: int
+    reports_by_status: Dict[str, int]
+    reports_by_evaluator: Dict[str, int]
+    average_generation_time_days: Optional[float] = None
+    average_review_time_days: Optional[float] = None
     
     class Config:
         from_attributes = True 
