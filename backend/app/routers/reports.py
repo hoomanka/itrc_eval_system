@@ -11,7 +11,7 @@ from datetime import datetime
 import os
 
 from ..database import get_db
-from ..models import TechnicalReport, Evaluation, User, UserRole, ReportStatus, ApplicationStatus
+from ..models import TechnicalReport, Evaluation, User, UserRole, ReportStatus, ApplicationStatus, Application
 from ..schemas import TechnicalReportCreate, TechnicalReportResponse, TechnicalReportUpdate
 from ..core.auth import get_current_user, get_current_active_user, require_role
 from ..services.report_generator import TechnicalReportGenerator
@@ -31,6 +31,10 @@ async def get_my_reports(
         print(f"Fetching reports for active user ID: {current_user.id} - Querying database...")
         reports = db.query(TechnicalReport).filter(TechnicalReport.generated_by == current_user.id).all()
         print(f"Reports fetched: {len(reports)} results")
+        # Ensure evaluation.application is present for each report
+        for report in reports:
+            if report.evaluation and not getattr(report.evaluation, 'application', None):
+                report.evaluation.application = db.query(Application).filter(Application.id == report.evaluation.application_id).first()
         return reports  # Always return, even if empty
     except HTTPException as http_e:
         raise http_e
@@ -69,7 +73,7 @@ async def generate_technical_report(
         )
     
     # Check if evaluation is completed
-    if evaluation.status != "completed":
+    if evaluation.status != "COMPLETED":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Evaluation must be completed before generating report"

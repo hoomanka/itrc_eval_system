@@ -55,8 +55,9 @@ export default function TechnicalReportsPage() {
   const [reportTitle, setReportTitle] = useState("");
 
   useEffect(() => {
-    fetchReports();
-    fetchAvailableEvaluations();
+    // Wait for both fetches to complete, then set loading to false
+    Promise.all([fetchReports(), fetchAvailableEvaluations()])
+      .finally(() => setLoading(false));
   }, []);
 
   // Automatically generate reports for completed evaluations that are ready
@@ -115,6 +116,7 @@ export default function TechnicalReportsPage() {
         setError("خطا در بارگیری گزارش‌ها");
       }
     } catch (err) {
+      console.error("Error in fetchReports:", err);
       setError("خطا در اتصال به سرور");
     }
   };
@@ -132,7 +134,7 @@ export default function TechnicalReportsPage() {
       if (response.ok) {
         const data = await response.json();
         const filteredEvaluations = data.filter((evaluation: Evaluation) => 
-          evaluation.status === "completed" && evaluation.report_ready_for_generation
+          evaluation.status === "COMPLETED" && evaluation.report_ready_for_generation
         );
         setAvailableEvaluations(filteredEvaluations);
       } else {
@@ -166,9 +168,11 @@ export default function TechnicalReportsPage() {
         setReportTitle("");
       } else {
         const errorData = await response.json();
+        console.error("Error in generateReport:", errorData);
         setError(errorData.detail || "خطا در تولید گزارش");
       }
     } catch (err) {
+      console.error("Error in generateReport:", err);
       setError("خطا در اتصال به سرور");
     } finally {
       setGeneratingReport(null);
@@ -196,9 +200,11 @@ export default function TechnicalReportsPage() {
         ));
       } else {
         const errorData = await response.json();
+        console.error("Error in submitForReview:", errorData);
         setError(errorData.detail || "خطا در ارسال گزارش برای بررسی");
       }
     } catch (err) {
+      console.error("Error in submitForReview:", err);
       setError("خطا در اتصال به سرور");
     } finally {
       setSubmittingReport(null);
@@ -229,6 +235,7 @@ export default function TechnicalReportsPage() {
         setError("خطا در دانلود گزارش");
       }
     } catch (err) {
+      console.error("Error in downloadReport:", err);
       setError("خطا در اتصال به سرور");
     }
   };
@@ -300,8 +307,9 @@ export default function TechnicalReportsPage() {
         </div>
 
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
-            {error}
+          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={() => setError("")} className="ml-4 text-red-700 hover:underline">بستن</button>
           </div>
         )}
 

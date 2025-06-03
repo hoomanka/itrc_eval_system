@@ -417,22 +417,23 @@ class SupervisorInfo(BaseModel):
     class Config:
         from_attributes = True
 
-class EvaluationBasicInfo(BaseModel):
-    id: int
-    start_date: datetime
-    end_date: Optional[datetime] = None
-    status: str
-    overall_score: Optional[float] = None
-
-    class Config:
-        from_attributes = True
-
 class ApplicationBasicInfo(BaseModel):
     id: int
     application_number: str
     product_name: str
     product_version: Optional[str] = None
     company_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class EvaluationBasicInfo(BaseModel):
+    id: int
+    start_date: datetime
+    end_date: Optional[datetime] = None
+    status: str
+    overall_score: Optional[float] = None
+    application: Optional[ApplicationBasicInfo] = None
 
     class Config:
         from_attributes = True

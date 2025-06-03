@@ -129,10 +129,15 @@ async def get_my_evaluations(
                 "application_id": eval_item.application_id,
                 "evaluator_id": eval_item.evaluator_id,
                 "status": eval_item.status.value if eval_item.status else EvaluationStatus.IN_PROGRESS.value,
-                # Add other essential fields the frontend might immediately need for display
-                # For example, if the frontend shows application name or product name:
-                # "application_name": eval_item.application.name if eval_item.application else "N/A",
-                # "product_name": eval_item.application.product_name if eval_item.application else "N/A",
+                "report_ready_for_generation": eval_item.report_ready_for_generation,
+                "overall_score": eval_item.overall_score,
+                "application": {
+                    "id": eval_item.application.id if eval_item.application else None,
+                    "application_number": eval_item.application.application_number if eval_item.application else "",
+                    "product_name": eval_item.application.product_name if eval_item.application else "",
+                    "product_version": eval_item.application.product_version if eval_item.application else "",
+                    "company_name": eval_item.application.company_name if eval_item.application else "",
+                } if eval_item.application else None,
             }
             result.append(eval_dict)
         except Exception as proc_error:
@@ -237,7 +242,7 @@ async def complete_evaluation(
             detail="همه مراحل ارزیابی باید تکمیل شوند"
         )
     
-    evaluation.status = "completed"
+    evaluation.status = "COMPLETED"
     evaluation.end_date = datetime.utcnow()
     evaluation.report_ready_for_generation = True  # Set flag for frontend to handle
     

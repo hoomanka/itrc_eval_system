@@ -1,0 +1,46 @@
+1 ⃣ Update the existing version (push changes onto the current branch)
+Pull any colleagues’ changes first:
+git pull origin main    # or whatever the current branch is
+
+
+Stage the files you modified or added:
+# everything:
+git add .
+# …or pick individual paths:
+git add src/server.py docs/README.md
+
+Commit:
+git commit -m "Fix bug in data parser; update docs"
+
+Push:
+git push origin main
+
+-------------------------------------------------------------------------------------------
+
+2 ⃣ Add a named new version while keeping the old one intact
+
+# 1. Go to your project folder
+cd D:\cctoolbox3
+
+# 2. Turn the folder into a Git repository (skip if ".git" already exists)
+git init
+
+# 3. Point it at your GitHub repo (skip if 'origin' is already set)
+git remote add origin https://github.com/hoomanka/itrc_eval_system.git
+
+# 4. Pull the current main branch *without* touching your files
+git fetch origin
+git checkout -b main --track origin/main 2>$null || git switch main
+# If the branch didn't exist locally, the first part creates it; otherwise, we switch to it.
+
+# 5. Create and switch to the new branch called v2
+git switch -c v2
+
+# 6. Stage every file in the folder
+git add .
+
+# 7. Commit them with a clear message
+git commit -m "Import complete project from D:\\cctoolbox3 as v2"
+
+# 8. Push the new branch to GitHub and set upstream tracking
+git push -u origin v2
