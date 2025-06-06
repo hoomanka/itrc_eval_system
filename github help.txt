@@ -1,3 +1,10 @@
+pull:
+D:\itrc_eval_system>git clone --branch v3 https://github.com/hoomanka/itrc_eval_system
+
+
+
+
+
 1 ⃣ Update the existing version (push changes onto the current branch)
 Pull any colleagues’ changes first:
 git pull origin main    # or whatever the current branch is
