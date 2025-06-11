@@ -20,6 +20,8 @@ or:
 | 4️⃣ Commit them                  | `bash git commit -m "Describe the change" ` | Creates a new checkpoint in the `v5` history.                                                                      |
 | 5️⃣ Push upstream                | `bash git push `                            | Because you did `git push -u origin v5` the first time, plain `git push` now knows to send commits to `origin/v5`. |
 
+
+
 ------------------------------------------------------------------------------------------------------------
 pull:
 ------------------------------------------------------------------------------------------------------------
@@ -35,6 +37,15 @@ git pull --rebase        # get everyone else’s work
 git add -A
 git commit -m "Your changes"
 git push                 # send your new commit up
+
+--------------------------------------------------------------------------------------------------------------
+create new folder and connect it (pull) to a branch:
+--------------------------------------------------------------------------------------------------------------
+git remote add origin https://github.com/hoomanka/itrc_eval_system.git
+git fetch origin --prune --tags
+git switch -c v6 origin/v6         # modern Git
+#  └─ older Git      git checkout -b v6 origin/v6
+
 ---------------------------------------------------------------------------------------------------------------
 everyday task:
 ---------------------------------------------------------------------------------------------------------------
