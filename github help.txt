@@ -1,53 +1,51 @@
+push as new branch:
+----------------------------------------------------------------------------------------------------------
+git switch -c v5    # makes the branch right where you are
+git add -A
+git commit -m "Version 5 – add full project snapshot"
+git push -u origin v5
+
+----------------------------------------------------------------------------------------------------------
+push to same branch:
+----------------------------------------------------------------------------------------------------------
+git add -A && git commit -m "WHAT you changed, and WHY" && git push
+
+or:
+
+| Step                             | Command                                     | What it does                                                                                                       |
+| -------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| 1️⃣ Make sure you’re **on** `v5` | `bash git switch v5 `                       | (If you’re already there Git will say “Already on ‘v5’”).                                                          |
+| 2️⃣ See what changed             | `bash git status `                          | Red = modified/ deleted • green = new files                                                                        |
+| 3️⃣ Stage the changes            | `bash git add -A `                          | `-A` = add **all** new / changed / deleted files. (To add just one file use `git add file.txt`.)                   |
+| 4️⃣ Commit them                  | `bash git commit -m "Describe the change" ` | Creates a new checkpoint in the `v5` history.                                                                      |
+| 5️⃣ Push upstream                | `bash git push `                            | Because you did `git push -u origin v5` the first time, plain `git push` now knows to send commits to `origin/v5`. |
+
+------------------------------------------------------------------------------------------------------------
 pull:
-D:\itrc_eval_system>git clone --branch v3 https://github.com/hoomanka/itrc_eval_system
+------------------------------------------------------------------------------------------------------------
+git switch v5
+git pull --rebase    # recommended
+
+
+# Start of day / before new work
+git switch v5
+git pull --rebase        # get everyone else’s work
+
+# …make edits…
+git add -A
+git commit -m "Your changes"
+git push                 # send your new commit up
+---------------------------------------------------------------------------------------------------------------
+everyday task:
+---------------------------------------------------------------------------------------------------------------
+
+git switch v5
+git pull --rebase        # get everyone else’s work
+
+# …make edits…
+git add -A
+git commit -m "Your changes"
+git push                 # send your new commit up
 
 
 
-
-
-1 ⃣ Update the existing version (push changes onto the current branch)
-Pull any colleagues’ changes first:
-git pull origin main    # or whatever the current branch is
-
-
-Stage the files you modified or added:
-# everything:
-git add .
-# …or pick individual paths:
-git add src/server.py docs/README.md
-
-Commit:
-git commit -m "Fix bug in data parser; update docs"
-
-Push:
-git push origin main
-
--------------------------------------------------------------------------------------------
-
-2 ⃣ Add a named new version while keeping the old one intact
-
-# 1. Go to your project folder
-cd D:\cctoolbox3
-
-# 2. Turn the folder into a Git repository (skip if ".git" already exists)
-git init
-
-# 3. Point it at your GitHub repo (skip if 'origin' is already set)
-git remote add origin https://github.com/hoomanka/itrc_eval_system.git
-
-# 4. Pull the current main branch *without* touching your files
-git fetch origin
-git checkout -b main --track origin/main 2>$null || git switch main
-# If the branch didn't exist locally, the first part creates it; otherwise, we switch to it.
-
-# 5. Create and switch to the new branch called v2
-git switch -c v2
-
-# 6. Stage every file in the folder
-git add .
-
-# 7. Commit them with a clear message
-git commit -m "Import complete project from D:\\cctoolbox3 as v2"
-
-# 8. Push the new branch to GitHub and set upstream tracking
-git push -u origin v2
